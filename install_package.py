@@ -1,17 +1,11 @@
 import sys
 import subprocess
-import os
 import json
 from pathlib import Path
 
-import cure_terminal as ct
+import cure_utility as cu
 
-# ANSI color codes
-COLOR_RESET = '\033[0m'
-COLOR_GREEN = '\033[92m'
-COLOR_RED = '\033[91m'
-COLOR_YELLOW = '\033[93m'
-COLOR_BLUE = '\033[94m'
+project_path = cu.Path.local()
 
 def get_installed_package_location(package_name):
     """
@@ -28,7 +22,7 @@ def get_installed_package_location(package_name):
                 if line.startswith("Editable project location:"):
                     return line.split(": ", 1)[1]
     except subprocess.CalledProcessError as e:
-        ct.Print.status("Error", f"checking package location: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
+        cu.Print.status("Error", f"checking package location: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
     return None
 
 def uninstall_package(package_name):
@@ -36,38 +30,49 @@ def uninstall_package(package_name):
     Uninstall the package if it is already installed.
     """
     try:
-        ct.Print.status("Info", f"Uninstalling existing package: `[[COLOR_OFF]]{package_name}[[COLOR_ON]]`")
+        cu.Print.status("Info", f"Uninstalling existing package: `[[COLOR_OFF]]{package_name}[[COLOR_ON]]`")
         subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", package_name])
-        ct.Print.status("Success", "Package uninstalled successfully.")
+        cu.Print.status("Success", "Package uninstalled successfully.")
     except subprocess.CalledProcessError as e:
-        ct.Print.status("Error", f"uninstalling the package: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
+        cu.Print.status("Error", f"uninstalling the package: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
         sys.exit(1)
 
 def install_package():
-    package_name = "cure_terminal"
+    package_name = "cure_utility"
     project_path = str(Path(__file__).parent.resolve())
     installed_path = get_installed_package_location(package_name)
 
-    ct.Print.status("Info", f"Project path: `[[COLOR_OFF]]{project_path}[[COLOR_ON]]`\n")
+    cu.Print.status("Info", f"Project path: `[[COLOR_OFF]]{project_path}[[COLOR_ON]]`\n")
     if installed_path:
-        ct.Print.status("Notice", f"Detected installed package path: `[[COLOR_OFF]]{installed_path}[[COLOR_ON]]`\n")
+        # Resolve paths to handle case and separator differences
+        installed_path_resolved = str(Path(installed_path).resolve())
+        project_path_resolved = str(Path(project_path).resolve())
 
-    if installed_path == project_path:
-        ct.Print.status("Success", f"`[[COLOR_OFF]]{package_name}[[COLOR_ON]]` is already installed in editable mode at `[[COLOR_OFF]]{project_path}[[COLOR_ON]]`. Skipping installation.")
+        cu.Print.status("Notice", f"Detected installed package path: `[[COLOR_OFF]]{installed_path_resolved}[[COLOR_ON]]`\n")
     else:
-        if installed_path:
+        cu.Print.status("Notice", "No install package detected.\n")
+        installed_path_resolved = None
+        project_path_resolved = project_path
+
+    # Compare the resolved paths
+    if installed_path_resolved == project_path_resolved:
+        cu.Print.status("Success", f"`[[COLOR_OFF]]{package_name}[[COLOR_ON]]` is already installed in editable mode at `[[COLOR_OFF]]{project_path}[[COLOR_ON]]`. Skipping installation.")
+    else:
+        cu.Print.status("Notice", "Detected installed package path not up to date.\n")
+
+        if installed_path_resolved:
             uninstall_package(package_name)
 
         python_executable = sys.executable
         command = [python_executable, "-m", "pip", "install", "-e", project_path]
 
-        ct.Print.status("Info", f"Running command: `[[COLOR_OFF]]{' '.join(command)}[[COLOR_ON]]`")
+        cu.Print.status("Info", f"Running command: `[[COLOR_OFF]]{' '.join(command)}[[COLOR_ON]]`")
 
         try:
             subprocess.check_call(command)
-            ct.Print.status("Success", "Package installed successfully in editable mode.")
+            cu.Print.status("Success", "Package installed successfully in editable mode.")
         except subprocess.CalledProcessError as e:
-            ct.Print.status("Error", f"An error occurred while installing the package: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
+            cu.Print.status("Error", f"An error occurred while installing the package: `[[COLOR_OFF]]{e}[[COLOR_ON]]`")
             sys.exit(1)
 
 def find_vscode_settings_path():
@@ -86,36 +91,46 @@ def find_vscode_settings_path():
 def update_vscode_settings():
     settings_path = find_vscode_settings_path()
     if not settings_path:
-        ct.Print.status("Notice", "VS Code settings.json file not found.")
+        cu.Print.status("Notice", "VS Code settings.json file not found.")
         return
 
     with open(settings_path, "r") as f:
         try:
             settings = json.load(f)
         except json.JSONDecodeError:
-            ct.Print.status("Error", "Invalid JSON format in settings.json.")
+            cu.Print.status("Error", "Invalid JSON format in settings.json.")
             return
 
     extra_paths = settings.get("python.analysis.extraPaths", [])
     if not isinstance(extra_paths, list):
         extra_paths = []
 
-    project_path = str(Path(__file__).parent.resolve())
-    if project_path not in extra_paths:
-        extra_paths.append(project_path)
-        settings["python.analysis.extraPaths"] = extra_paths
+    project_folder_name = Path(project_path).name  # Get the last directory name (e.g., "my_project")
 
+    # Remove entries ending with the same folder name but not exactly matching `project_path`
+    updated_paths = [
+        path for path in extra_paths 
+        if not (Path(path).name == project_folder_name and path != project_path)
+    ]
+    
+    # Add `project_path` if it’s not in the updated list
+    if project_path not in updated_paths:
+        updated_paths.append(project_path)
+    
+    # Update settings only if there were changes
+    if extra_paths != updated_paths:
+        settings["python.analysis.extraPaths"] = updated_paths
         with open(settings_path, "w") as f:
             json.dump(settings, f, indent=4)
-        ct.Print.status("Success", f"Updated settings.json to include `[[COLOR_OFF]]{project_path}[[COLOR_ON]]` in python.analysis.extraPaths.")
+        cu.Print.status("Success", f"Updated settings.json to include `[[COLOR_OFF]]{project_path}[[COLOR_ON]]` and removed paths ending in '{project_folder_name}' that did not exactly match.")
     else:
-        ct.Print.status("Success", f"`[[COLOR_OFF]]{project_path}[[COLOR_ON]]` is already in python.analysis.extraPaths.")
+        cu.Print.status("Success", f"`[[COLOR_OFF]]{project_path}[[COLOR_ON]]` is already in python.analysis.extraPaths with no similar folder duplicates.")
 
 if __name__ == "__main__":
-    ct.Print.title("Install Cure Interactive Script Begin")
+    cu.Print.title("Install Cure Interactive Script Begin")
     install_package()
     update_vscode_settings()
     print()
-    ct.Print.title("Install Cure Interactive Script End")
-    ct.Print.status("Info", "Press Enter to exit...")
+    cu.Print.title("Install Cure Interactive Script End")
+    cu.Print.status("Info", "Press Enter to exit...")
     input()
