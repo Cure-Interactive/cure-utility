@@ -815,7 +815,9 @@ class Print:
         # Get the color for the current status type
         color = Status.text_color(status_type)
 
-        Print.color(color, f"[{status_type}] {message}")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        Print.color(color, f"[[COLOR_OFF]][{timestamp}][[COLOR_ON]] [{status_type}] {message}")
 
     @staticmethod
     def title(text: str, width: int = TERMINAL_WIDTH_DEFAULT, flank_char: str = '=', color: str = Status.text_color("Info")) -> None:
