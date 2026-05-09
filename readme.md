@@ -57,6 +57,19 @@ Before proceeding, ensure you have the following:
    python -m pip uninstall cure_utility
    ```
 
+## Inventory Manager Web Project
+
+This repository now also contains a Synticore project for the browser-based parity track of the Inventory Transaction Manager.
+
+The npm root for that web surface is `inventory_transaction_manager/`, and the nested Synticore project lives under `inventory_transaction_manager/web/` so it does not mix its build files with the Python app files.
+
+Run from `inventory_transaction_manager/`:
+
+```bash
+npm run inventory-manager:web:build
+npm run inventory-manager:web:browser
+```
+
 ---
 
 ## Contact
